@@ -9,18 +9,18 @@ Build a single Jupyter notebook (`returnguard/returnguard_prototype.ipynb`) that
 ## Tasks
 
 - [ ] 1. Set up notebook skeleton and Section 1 (Setup & Imports)
-  - [ ] 1.1 Create `returnguard/returnguard_prototype.ipynb` with all 10 Markdown heading cells in order
+  - [x] 1.1 Create `returnguard/returnguard_prototype.ipynb` with all 10 Markdown heading cells in order
     - Create the `.ipynb` file with the correct JSON structure
     - Add one Markdown cell per section: (1) Setup & Imports, (2) Load & Validate Data, (3) Exploratory Data Analysis, (4) Feature Engineering, (5) Train/Validation/Test Split, (6) Model Training, (7) Threshold Tuning, (8) SHAP Explainability, (9) Policy Engine, (10) Demo Validation
     - _Requirements: 10.1_
-  - [ ] 1.2 Write the Setup & Imports code cell
+  - [x] 1.2 Write the Setup & Imports code cell
     - Import all libraries in one cell: `random`, `time`, `json`, `os`, `pathlib.Path`, `numpy`, `pandas`, `matplotlib.pyplot`, `seaborn`, `lightgbm`, `shap`, `joblib`, `sklearn.model_selection`, `sklearn.metrics`
     - Fix seeds: `SEED=42`, `random.seed(SEED)`, `np.random.seed(SEED)`
     - Print library versions for `pandas`, `numpy`, `lightgbm`, `shap`, `sklearn`, `joblib`
     - _Requirements: 10.2, 10.5, 10.6_
 
 - [ ] 2. Section 2 — Load & Validate Data
-  - [ ] 2.1 Implement `load_and_validate()` and the dataset loading cell
+  - [x] 2.1 Implement `load_and_validate()` and the dataset loading cell
     - Resolve CSV path relative to notebook parent using `Path.cwd().parent / "datasets/ecommerce_return_abuse_dataset.csv"` (with a `..` fallback pattern)
     - Raise `FileNotFoundError` with descriptive path message if file not found
     - Validate that `abuse_type` contains exactly `{"Legitimate", "Policy Abuser", "Fraudulent Return", "Wardrobing"}`; raise `ValueError` listing missing values if not
@@ -32,7 +32,7 @@ Build a single Jupyter notebook (`returnguard/returnguard_prototype.ipynb`) that
     - Test that `load_and_validate()` raises `ValueError` for DataFrames missing one or more of the four required class values
 
 - [ ] 3. Section 3 — Exploratory Data Analysis
-  - [ ] 3.1 Implement EDA plotting functions and cells
+  - [x] 3.1 Implement EDA plotting functions and cells
     - `plot_class_distribution(df)`: bar chart of `abuse_type` counts with percentage labels on each bar
     - `plot_correlation_heatmap(df)`: Pearson heatmap of all numeric columns, diverging colormap `RdBu_r`
     - `summarize_missing(df)`: display table of count + `%` only for columns with ≥ 1 null; skip columns with zero nulls
@@ -45,7 +45,7 @@ Build a single Jupyter notebook (`returnguard/returnguard_prototype.ipynb`) that
     - Test `summarize_missing()` with synthetic DataFrames: verify it includes only columns with ≥ 1 null and excludes fully-populated columns
 
 - [ ] 4. Section 4 — Feature Engineering
-  - [ ] 4.1 Implement `engineer_features()` and the label encoding cell
+  - [x] 4.1 Implement `engineer_features()` and the label encoding cell
     - Create `abuse_label` integer encoding: `Legitimate=0`, `Policy Abuser=1`, `Fraudulent Return=2`, `Wardrobing=3`; persist `LABEL_MAP` and `INT_TO_LABEL`
     - Implement `engineer_features(df, cat_risk_map=None)` returning `(df_out, cat_risk_map)`:
       - `order_to_return_days`: `(return_date - order_date).dt.days.clip(lower=0).astype(int)`
@@ -56,7 +56,7 @@ Build a single Jupyter notebook (`returnguard/returnguard_prototype.ipynb`) that
     - Cast categorical columns to `"category"` dtype; define `CAT_COLS` list
     - Define `FEATURE_COLS` list (excluding `customer_id`, `order_id`, `order_date`, `return_date`, `abuse_type`, `abuse_label`); print the list
     - _Requirements: 3.1, 3.2, 3.3, 3.4, 3.5, 3.6, 3.7_
-  - [ ]* 4.2 Write property tests for engineered feature formulas
+  - [x]* 4.2 Write property tests for engineered feature formulas
     - **Property 3: `order_to_return_days` is non-negative and correct**
     - **Validates: Requirements 3.1**
     - **Property 4: `return_ratio` is safe against zero denominators**
@@ -68,7 +68,7 @@ Build a single Jupyter notebook (`returnguard/returnguard_prototype.ipynb`) that
     - Use Hypothesis to generate arbitrary non-negative inputs; verify formulas hold and no `ZeroDivisionError` is raised
 
 - [ ] 5. Section 5 — Train/Validation/Test Split
-  - [ ] 5.1 Implement `split_data()` and the split cell
+  - [x] 5.1 Implement `split_data()` and the split cell
     - Split into 70 % train / 10 % validation / 20 % test using stratified sampling on `abuse_label`, `random_state=42`
     - Compute `cat_risk_map` from training rows only via `engineer_features(X_train_raw, cat_risk_map=None)`, then apply map to validation and test rows
     - Print class distribution (counts + %) for each of the three splits
@@ -85,12 +85,12 @@ Build a single Jupyter notebook (`returnguard/returnguard_prototype.ipynb`) that
   - Ensure all tests pass, ask the user if questions arise.
 
 - [ ] 7. Section 6 — LightGBM Model Training
-  - [ ] 7.1 Implement model training cell with native categoricals and early stopping
+  - [x] 7.1 Implement model training cell with native categoricals and early stopping
     - Cast all `CAT_COLS` to `"category"` dtype on all three splits before fitting
     - Instantiate `LGBMClassifier(objective="multiclass", num_class=4, class_weight="balanced", n_estimators=1000, learning_rate=0.05, num_leaves=63, random_state=42, n_jobs=-1)`
     - Fit with `eval_set=[(X_val, y_val)]`, `categorical_feature=CAT_COLS`, callbacks: `lgb.early_stopping(stopping_rounds=50)` and `lgb.log_evaluation(period=100)`
     - _Requirements: 5.1, 5.2, 5.3, 5.4_
-  - [ ] 7.2 Implement test-set evaluation and artifact saving
+  - [x] 7.2 Implement test-set evaluation and artifact saving
     - Compute and display: macro F1, per-class precision/recall (classification report), confusion matrix on test set
     - Create `returnguard/artifacts/` with `Path.mkdir(parents=True, exist_ok=True)`
     - Save `model.joblib` via `joblib.dump(model, ARTIFACTS / "model.joblib")`
@@ -102,7 +102,7 @@ Build a single Jupyter notebook (`returnguard/returnguard_prototype.ipynb`) that
     - Load `model.joblib` into a new variable; assert `predict_proba` outputs match original within 1e-6 tolerance on a sample of test rows
 
 - [ ] 8. Section 7 — Probability Threshold Auto-Tuning
-  - [ ] 8.1 Implement `tune_threshold()` and the POLICY_CONFIG sweep cell
+  - [x] 8.1 Implement `tune_threshold()` and the POLICY_CONFIG sweep cell
     - Define initial `POLICY_CONFIG` dict with keys: `thresh_legitimate=0.60`, `thresh_wardrobing=0.50`, `thresh_policy_abuser=0.45`, `thresh_fraudulent=0.40`, `fee_pkr=950`
     - Implement `tune_threshold(probs_val, y_val, class_idx, metric, thresholds)` sweeping `np.arange(0.30, 0.91, 0.05)`; maximize recall for classes 1, 2, 3 and precision for class 0
     - Update `POLICY_CONFIG` in-place with tuned values; print each tuned threshold and achieved score
@@ -114,7 +114,7 @@ Build a single Jupyter notebook (`returnguard/returnguard_prototype.ipynb`) that
     - Generate synthetic probability arrays; verify `tune_threshold()` returns the threshold achieving the best score among all candidates in the sweep range
 
 - [ ] 9. Section 8 — SHAP Explainability
-  - [ ] 9.1 Implement cached TreeExplainer and four waterfall plots
+  - [x] 9.1 Implement cached TreeExplainer and four waterfall plots
     - Create `explainer = shap.TreeExplainer(model)` after training (cached — one instance)
     - Compute `shap_values_test = explainer.shap_values(X_test)` on the test set
     - Handle both list output (index by class) and 3-D array output (slice last axis) per design error-handling spec
@@ -127,7 +127,7 @@ Build a single Jupyter notebook (`returnguard/returnguard_prototype.ipynb`) that
     - Test `get_representative_sample()` with synthetic probability matrices: verify it returns the highest-confidence index among samples ≥ 0.70, and falls back to global argmax when none qualify
 
 - [ ] 10. Section 9 — Policy Engine
-  - [ ] 10.1 Implement `predict_return(features: dict) -> dict`
+  - [x] 10.1 Implement `predict_return(features: dict) -> dict`
     - Define all module-level constants: `LABEL_MAP`, `INT_TO_LABEL`, `ACTION_MAP`, `CUSTOMER_MESSAGES`, `MERCHANT_NOTES`; reference only `POLICY_CONFIG` for thresholds — no hardcoded values inside the function
     - Function body: build `pd.DataFrame([features])`, cast `CAT_COLS`, compute all five engineered features using `CAT_RISK_MAP`, select `FEATURE_COLS`, call `model.predict_proba()`, build `probs` dict
     - Severity-ordered threshold evaluation: Fraudulent Return → Wardrobing → Policy Abuser → Legitimate → Uncertain
@@ -149,7 +149,7 @@ Build a single Jupyter notebook (`returnguard/returnguard_prototype.ipynb`) that
   - Ensure all tests pass, ask the user if questions arise.
 
 - [ ] 12. Section 10 — Demo Profile Validation
-  - [ ] 12.1 Implement four demo profile dicts and validation loop
+  - [x] 12.1 Implement four demo profile dicts and validation loop
     - Define `DEMO_PROFILES` list with four complete feature dicts:
       - **Honest Shopper**: `expected_action="AUTO_APPROVE"` — low return history, valid tracking, no disputes, legitimate return reason, packaging intact
       - **Wardrober**: `expected_action="VERIFY_TAGS"` — high-value clothing, short return window, item opened, many lifetime returns
