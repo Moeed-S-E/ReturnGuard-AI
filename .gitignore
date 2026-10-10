@@ -12,15 +12,18 @@ returnguard/data/
 07_Complete_Project_Definition.md
 Guide.md
 setup_git.sh
+
 __pycache__/
 *.py[cod]
 .ipynb_checkpoints/
 .venv/
 venv/
-*.joblib
-artifacts/*.joblib
 .pytest_cache/
 .hypothesis/
 *.egg-info/
 .DS_Store
 
+# Ignore joblib models generally, BUT keep the deployed model so Streamlit
+# Cloud can load it (3 MB, well under GitHub limits).
+*.joblib
+!returnguard/artifacts/model.joblib
