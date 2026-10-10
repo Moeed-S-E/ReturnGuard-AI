@@ -1,5 +1,6 @@
-# Datasets (large, keep local only — GitHub 100MB limit)
-datasets/
+# Datasets: ignore the folder, but keep the small 4-class CSV the app/model need.
+datasets/*
+!datasets/ecommerce_return_abuse_dataset.csv
 returnguard/data/
 
 # Planning / internal docs (keep local only, do not publish)
@@ -23,7 +24,6 @@ venv/
 *.egg-info/
 .DS_Store
 
-# Ignore joblib models generally, BUT keep the deployed model so Streamlit
-# Cloud can load it (3 MB, well under GitHub limits).
+#  Ignore joblib models generally, BUT keep the deployed model.
 *.joblib
 !returnguard/artifacts/model.joblib
