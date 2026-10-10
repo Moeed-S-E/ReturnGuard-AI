@@ -1,117 +1,178 @@
-import joblib
-import pandas as pd
-import numpy as np
-import shap
-import time
-import os
+"""ReturnGuard policy engine (modular, model-aligned).
 
-POLICY_CONFIG = {
-    'thresholds': {
-        'Fraudulent Return': 0.50,
-        'Wardrobing': 0.60,
-        'Policy Abuser': 0.55,
-        'Legitimate': 0.75
-    },
-    'fee_pkr': 950
+Mirrors the validated logic in returnguard_prototype.ipynb. Loads the trained
+LightGBM model and the persisted feature/threshold config, then scores a return
+request into a policy action with SHAP-based reasons.
+
+Artifacts expected in artifacts/:
+    model.joblib        trained LGBMClassifier
+    policy_config.json  tuned thresholds + fee + cat_risk_map + feature lists
+
+Run train_model.py (or the notebook) first to produce these.
+"""
+from __future__ import annotations
+
+import json
+import time
+from pathlib import Path
+
+import joblib
+import numpy as np
+import pandas as pd
+import shap
+
+ARTIFACTS = Path(__file__).resolve().parent / "artifacts"
+
+LABEL_MAP = {"Legitimate": 0, "Policy Abuser": 1, "Fraudulent Return": 2, "Wardrobing": 3}
+INT_TO_LABEL = {v: k for k, v in LABEL_MAP.items()}
+
+CAT_COLS = ["customer_segment", "country", "platform", "device_type",
+            "payment_method", "product_category", "return_reason", "shipping_carrier"]
+BOOL_COLS = ["is_high_value_item", "discount_used", "item_returned_opened",
+             "return_packaging_intact", "photo_evidence_provided", "tracking_number_valid",
+             "address_change_before_delivery", "refund_to_different_account",
+             "multiple_accounts_flag", "review_left_after_return"]
+NUMERIC_RAW = ["age", "account_age_days", "avg_order_value_usd",
+               "refund_amount_requested_usd", "days_to_return",
+               "total_orders_lifetime", "total_returns_lifetime", "return_rate_pct",
+               "customer_support_contacts", "previous_dispute_count",
+               "wishlist_to_cart_time_hrs"]
+ENGINEERED = ["order_to_return_days", "return_ratio", "risk_exposure",
+              "category_risk_index", "dispute_frequency"]
+FEATURE_COLS = NUMERIC_RAW + BOOL_COLS + CAT_COLS + ENGINEERED
+
+SEVERITY = ["Fraudulent Return", "Wardrobing", "Policy Abuser", "Legitimate"]
+THRESH_KEY = {
+    "Fraudulent Return": "thresh_fraudulent",
+    "Wardrobing": "thresh_wardrobing",
+    "Policy Abuser": "thresh_policy_abuser",
+    "Legitimate": "thresh_legitimate",
+}
+ACTION_MAP = {
+    "Fraudulent Return": "FRAUD_HOLD",
+    "Wardrobing": "VERIFY_TAGS",
+    "Policy Abuser": "FEE_DEDUCTION",
+    "Legitimate": "AUTO_APPROVE",
+    "Uncertain": "LIGHT_VERIFY",
+}
+BANNER = {
+    "AUTO_APPROVE": "Green", "VERIFY_TAGS": "Yellow", "FEE_DEDUCTION": "Orange",
+    "FRAUD_HOLD": "Red", "LIGHT_VERIFY": "Yellow",
+}
+CUSTOMER_MESSAGES = {
+    "AUTO_APPROVE":  "Your return has been approved. Refund will be processed in 3-5 business days.",
+    "VERIFY_TAGS":   "Quick check needed: keep all tags and packaging intact, or upload a photo of the tag.",
+    "FEE_DEDUCTION": "Return authorized. A PKR 950 handling and restocking fee will be deducted from your refund.",
+    "FRAUD_HOLD":    "Your request is under review. Our team will contact you within 24 hours.",
+    "LIGHT_VERIFY":  "Your return is being reviewed. We may reach out for additional information.",
+}
+MERCHANT_NOTES = {
+    "AUTO_APPROVE":  "Low-risk return. Approve automatically.",
+    "VERIFY_TAGS":   "Wardrobing risk. Verify product condition and tags before refund.",
+    "FEE_DEDUCTION": "Policy-abuse pattern. Apply restocking fee per policy.",
+    "FRAUD_HOLD":    "High fraud probability. Hold and route to manual review.",
+    "LIGHT_VERIFY":  "Uncertain profile. Light verification recommended.",
 }
 
+DEFAULT_POLICY_CONFIG = {
+    "thresh_legitimate": 0.60, "thresh_wardrobing": 0.50,
+    "thresh_policy_abuser": 0.45, "thresh_fraudulent": 0.40, "fee_pkr": 950,
+}
+
+
+def _class_shap(sv, class_idx):
+    """Return 1-D SHAP values for one sample across shap output formats."""
+    if isinstance(sv, list):
+        return sv[class_idx][0]
+    sv = np.asarray(sv)
+    if sv.ndim == 3:          # (samples, features, classes)
+        return sv[0, :, class_idx]
+    return sv[0]
+
+
 class PolicyEngine:
-    def __init__(self):
-        if not os.path.exists('artifacts/model.joblib'):
-            raise RuntimeError("Model file not found. Please train the model first.")
-        self.model = joblib.load('artifacts/model.joblib')
+    """Loads the trained model + config and scores return requests."""
+
+    def __init__(self, artifacts_dir: Path | str = ARTIFACTS):
+        self.dir = Path(artifacts_dir)
+        model_path = self.dir / "model.joblib"
+        if not model_path.exists():
+            raise RuntimeError(
+                f"Model not found at {model_path}. Train the model first "
+                "(run train_model.py or the notebook)."
+            )
+        self.model = joblib.load(model_path)
         self.explainer = shap.TreeExplainer(self.model)
-        self.classes = ['Legitimate', 'Policy Abuser', 'Fraudulent Return', 'Wardrobing']
-        self.class_map = {0: 'Legitimate', 1: 'Policy Abuser', 2: 'Fraudulent Return', 3: 'Wardrobing'}
-        
-    def predict_return(self, features: dict):
-        start_time = time.perf_counter()
-        
-        df = pd.DataFrame([features])
-        if 'product_category' in df.columns:
-            df['product_category'] = df['product_category'].astype('category')
-        if 'payment_method' in df.columns:
-            df['payment_method'] = df['payment_method'].astype('category')
-            
-        probas = self.model.predict_proba(df)[0]
-        prob_dict = {self.class_map[i]: float(probas[i]) for i in range(4)}
-        
-        predicted_class = "Uncertain"
-        action = "LIGHT_VERIFY"
-        fee_pkr = 0
-        customer_message = "Your request is under review. Our team will contact you within 24 hours."
-        merchant_note = "Requires lightweight verification."
-        banner = "Yellow"
-        
-        # Severity-first evaluation
-        if prob_dict['Fraudulent Return'] >= POLICY_CONFIG['thresholds']['Fraudulent Return']:
-            predicted_class = 'Fraudulent Return'
-            action = 'FRAUD_HOLD'
-            customer_message = "Your request is under review. Our team will contact you within 24 hours."
-            merchant_note = "High fraud probability. Manual review required."
-            banner = "Red"
-        elif prob_dict['Wardrobing'] >= POLICY_CONFIG['thresholds']['Wardrobing']:
-            predicted_class = 'Wardrobing'
-            action = 'VERIFY_TAGS'
-            customer_message = "Quick check needed: drop the item at a store with tags attached, or upload a photo of the tag."
-            merchant_note = "Wardrobing suspected. Check for tags."
-            banner = "Yellow"
-        elif prob_dict['Policy Abuser'] >= POLICY_CONFIG['thresholds']['Policy Abuser']:
-            predicted_class = 'Policy Abuser'
-            action = 'FEE_DEDUCTION'
-            fee_pkr = POLICY_CONFIG['fee_pkr']
-            customer_message = f"Return authorized. A PKR {fee_pkr} handling and restocking fee will be deducted from your refund."
-            merchant_note = "Policy abuse pattern detected. Fee applied."
-            banner = "Orange"
-        elif prob_dict['Legitimate'] >= POLICY_CONFIG['thresholds']['Legitimate']:
-            predicted_class = 'Legitimate'
-            action = 'AUTO_APPROVE'
-            customer_message = "Your return is approved! Show this QR code to the courier. Full refund on handoff."
-            merchant_note = "Low risk. Auto-approved."
-            banner = "Green"
+
+        cfg_path = self.dir / "policy_config.json"
+        if cfg_path.exists():
+            cfg = json.loads(cfg_path.read_text())
+            self.policy_config = cfg.get("policy_config", dict(DEFAULT_POLICY_CONFIG))
+            self.cat_risk_map = cfg.get("cat_risk_map", {})
+            self.feature_cols = cfg.get("feature_cols", FEATURE_COLS)
         else:
-            predicted_class = 'Uncertain'
-            action = 'LIGHT_VERIFY'
-            customer_message = "Quick check needed: upload a photo of the tag."
-            merchant_note = "Uncertain classification. Light verification requested."
-            banner = "Yellow"
-            
-        shap_values_obj = self.explainer(df)
-        
-        try:
-            if len(shap_values_obj.shape) == 3:
-                # Shape: (1, n_features, n_classes)
-                class_idx = list(self.class_map.values()).index(predicted_class) if predicted_class != 'Uncertain' else np.argmax(probas)
-                shap_vals = shap_values_obj.values[0, :, class_idx]
-            else:
-                shap_vals = shap_values_obj.values[0]
-        except Exception:
-            shap_vals = np.zeros(df.shape[1])
-            
-        top_reasons = []
-        feature_names = df.columns.tolist()
-        sorted_indices = np.argsort(np.abs(shap_vals))[::-1]
-        for idx in sorted_indices[:3]:
-            top_reasons.append((feature_names[idx], float(shap_vals[idx])))
-            
-        latency_ms = (time.perf_counter() - start_time) * 1000
-        
+            self.policy_config = dict(DEFAULT_POLICY_CONFIG)
+            self.cat_risk_map = {}
+            self.feature_cols = FEATURE_COLS
+
+    def _build_row(self, features: dict) -> pd.DataFrame:
+        row = pd.DataFrame([features])
+        o2r = (pd.to_datetime(row["return_date"].iloc[0]) -
+               pd.to_datetime(row["order_date"].iloc[0])).days
+        row["order_to_return_days"] = max(0, int(o2r))
+        row["return_ratio"] = (row["total_returns_lifetime"].iloc[0] /
+                               max(row["total_orders_lifetime"].iloc[0], 1))
+        row["risk_exposure"] = (row["refund_amount_requested_usd"].iloc[0] *
+                                (1 + row["previous_dispute_count"].iloc[0]))
+        row["category_risk_index"] = self.cat_risk_map.get(
+            row["product_category"].iloc[0], 0.0)
+        row["dispute_frequency"] = (row["previous_dispute_count"].iloc[0] /
+                                    max(row["account_age_days"].iloc[0] / 30, 1))
+        X = row[self.feature_cols].copy()
+        for c in CAT_COLS:
+            if c in X.columns:
+                X[c] = X[c].astype("category")
+        return X
+
+    def predict_return(self, features: dict) -> dict:
+        t0 = time.perf_counter()
+        X = self._build_row(features)
+
+        probs_arr = self.model.predict_proba(X)[0]
+        probs = {INT_TO_LABEL[i]: float(p) for i, p in enumerate(probs_arr)}
+
+        predicted_class = "Uncertain"
+        for cls in SEVERITY:
+            if probs[cls] >= self.policy_config[THRESH_KEY[cls]]:
+                predicted_class = cls
+                break
+
+        action = ACTION_MAP[predicted_class]
+        fee_pkr = self.policy_config["fee_pkr"] if action == "FEE_DEDUCTION" else 0
+
+        cls_idx = LABEL_MAP.get(predicted_class, int(np.argmax(probs_arr)))
+        shap_row = _class_shap(self.explainer.shap_values(X), cls_idx)
+        top3 = np.argsort(np.abs(shap_row))[-3:][::-1]
+        top_reasons = [(self.feature_cols[i], float(shap_row[i])) for i in top3]
+
         return {
-            "probs": prob_dict,
+            "probs": probs,
             "predicted_class": predicted_class,
             "action": action,
             "fee_pkr": fee_pkr,
-            "customer_message": customer_message,
-            "merchant_note": merchant_note,
+            "customer_message": CUSTOMER_MESSAGES[action],
+            "merchant_note": MERCHANT_NOTES[action],
+            "banner": BANNER[action],
             "top_reasons": top_reasons,
-            "latency_ms": latency_ms,
-            "banner": banner,
-            "shap_explanation": shap_values_obj
+            "latency_ms": (time.perf_counter() - t0) * 1000.0,
         }
 
-def get_policy_engine():
-    if not os.path.exists('artifacts/model.joblib'):
-        print("Model not found. Triggering training...")
-        import train_model
-        train_model.train()
-    return PolicyEngine()
+
+_ENGINE = None
+
+def get_policy_engine() -> PolicyEngine:
+    """Lazy singleton accessor for the Streamlit app."""
+    global _ENGINE
+    if _ENGINE is None:
+        _ENGINE = PolicyEngine()
+    return _ENGINE

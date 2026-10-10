@@ -2,6 +2,16 @@
 datasets/
 returnguard/data/
 
+# Planning / internal docs (keep local only, do not publish)
+01_Objectives.md
+02_PRD.md
+03_TRD.md
+04_Design.md
+05_Plan.md
+06_Definition_of_Done.md
+07_Complete_Project_Definition.md
+Guide.md
+setup_git.sh
 __pycache__/
 *.py[cod]
 .ipynb_checkpoints/
@@ -13,3 +23,4 @@ artifacts/*.joblib
 .hypothesis/
 *.egg-info/
 .DS_Store
+
