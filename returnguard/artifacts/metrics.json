@@ -1,31 +1,16 @@
 {
-    "macro_f1": 1.0,
-    "precision": 1.0,
-    "recall": 1.0,
-    "confusion_matrix": [
-        [
-            706,
-            0,
-            0,
-            0
-        ],
-        [
-            0,
-            117,
-            0,
-            0
-        ],
-        [
-            0,
-            0,
-            100,
-            0
-        ],
-        [
-            0,
-            0,
-            0,
-            77
-        ]
-    ]
+  "macro_f1": 0.9983567794543897,
+  "per_class_f1": {
+    "Legitimate": 1.0,
+    "Policy Abuser": 0.9972202918693537,
+    "Fraudulent Return": 0.9983619983619983,
+    "Wardrobing": 0.9978448275862069
+  },
+  "label_map": {
+    "Legitimate": 0,
+    "Policy Abuser": 1,
+    "Fraudulent Return": 2,
+    "Wardrobing": 3
+  },
+  "best_iteration": 114
 }

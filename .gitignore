@@ -11,7 +11,7 @@ returnguard/data/
 06_Definition_of_Done.md
 07_Complete_Project_Definition.md
 Guide.md
-
+setup_git.sh
 __pycache__/
 *.py[cod]
 .ipynb_checkpoints/
@@ -23,3 +23,4 @@ artifacts/*.joblib
 .hypothesis/
 *.egg-info/
 .DS_Store
+
