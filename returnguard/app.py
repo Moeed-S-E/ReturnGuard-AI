@@ -1,10 +1,15 @@
-"""ReturnGuard Streamlit app — Customer Portal + Merchant Dashboard.
+"""ReturnGuard — full MVP Streamlit app.
+
+Two views:
+  * Customer Portal   — submit a return, get an instant explained resolution.
+  * Merchant Dashboard — batch-scored returns, KPIs, business-impact panel,
+                         SHAP reasons, and manual override with audit note.
 
     streamlit run app.py
-
-Loads the trained model via policy_engine.PolicyEngine (cached once).
 """
 from __future__ import annotations
+
+from pathlib import Path
 
 import pandas as pd
 import streamlit as st
@@ -13,17 +18,35 @@ from policy_engine import get_policy_engine
 
 st.set_page_config(page_title="ReturnGuard", page_icon="🛡️", layout="wide")
 
+HERE = Path(__file__).resolve().parent
+DATA_CANDIDATES = [
+    HERE.parent / "datasets" / "ecommerce_return_abuse_dataset.csv",
+    HERE / "datasets" / "ecommerce_return_abuse_dataset.csv",
+]
+
+# ---- Impact assumptions (shown on screen, configurable) ----
+USD_TO_PKR = 278.0
+HANDLING_COST_USD = 30.0      # research estimate, per prevented consignment
+CO2_PER_TRIP_KG = 1.0         # placeholder estimate per avoided trip
+
 BANNER_STYLE = {
-    "Green":  ("#1b7f3b", "✅"),
-    "Yellow": ("#9a7d0a", "🔎"),
-    "Orange": ("#b35900", "⚠️"),
-    "Red":    ("#9b1c1c", "⛔"),
+    "Green":  ("#1b7f3b", "✅"), "Yellow": ("#9a7d0a", "🔎"),
+    "Orange": ("#b35900", "⚠️"), "Red":    ("#9b1c1c", "⛔"),
 }
 
 
 @st.cache_resource(show_spinner="Loading model…")
-def _engine():
+def engine():
     return get_policy_engine()
+
+
+@st.cache_data(show_spinner="Loading sample returns…")
+def sample_returns(n=40):
+    for p in DATA_CANDIDATES:
+        if p.exists():
+            df = pd.read_csv(p)
+            return df.sample(min(n, len(df)), random_state=7).reset_index(drop=True)
+    return pd.DataFrame()
 
 
 def _base_profile(**over):
@@ -95,6 +118,7 @@ def banner(result):
         f"</div>", unsafe_allow_html=True)
 
 
+# ------------------------------------------------------------------ Customer
 def customer_portal():
     st.header("Fast Return & Exchange Center")
     st.caption("Submit a return and get an instant resolution.")
@@ -108,56 +132,143 @@ def customer_portal():
     c3.metric("Days to return", features["days_to_return"])
 
     if st.button("Submit Return Request", type="primary"):
-        result = _engine().predict_return(features)
+        result = engine().predict_return(features)
         banner(result)
         if result["fee_pkr"]:
             st.info(f"A handling/restocking fee of PKR {result['fee_pkr']} applies.")
+        with st.expander("Why this decision?"):
+            for feat, val in result["top_reasons"]:
+                st.write(f"- `{feat}`: {val:+.3f}")
         st.caption(f"Decided in {result['latency_ms']:.0f} ms")
+
+
+# ------------------------------------------------------------------ Merchant
+def _score_frame(df: pd.DataFrame) -> pd.DataFrame:
+    rows = []
+    eng = engine()
+    for _, rec in df.iterrows():
+        feats = rec.to_dict()
+        feats.setdefault("order_date", "2023-06-01")
+        feats.setdefault("return_date", "2023-06-10")
+        r = eng.predict_return(feats)
+        rows.append({
+            "order_id": rec.get("order_id", "—"),
+            "category": rec.get("product_category", "—"),
+            "refund_usd": float(rec.get("refund_amount_requested_usd", 0) or 0),
+            "class": r["predicted_class"], "action": r["action"],
+            "fee_pkr": r["fee_pkr"],
+            "true_label": rec.get("abuse_type", "—"),
+        })
+    return pd.DataFrame(rows)
+
+
+def impact_panel(scored: pd.DataFrame):
+    flagged = scored[scored["action"].isin(["FRAUD_HOLD", "VERIFY_TAGS"])]
+    value_protected_usd = flagged["refund_usd"].sum()
+    prevented = len(flagged)
+    handling_saved_usd = prevented * HANDLING_COST_USD
+    co2_avoided_kg = prevented * CO2_PER_TRIP_KG
+
+    st.subheader("Business impact (illustrative)")
+    i1, i2, i3 = st.columns(3)
+    i1.metric("Value protected", f"PKR {value_protected_usd * USD_TO_PKR:,.0f}",
+              help=f"~${value_protected_usd:,.0f} in refunds on flagged fraud/wardrobing returns")
+    i2.metric("Handling cost saved", f"${handling_saved_usd:,.0f}",
+              help=f"{prevented} prevented consignments × ${HANDLING_COST_USD}")
+    i3.metric("CO₂ avoided", f"{co2_avoided_kg:,.1f} kg",
+              help=f"{prevented} avoided trips × {CO2_PER_TRIP_KG} kg (estimate)")
+    st.caption("Assumptions: handling $30/return, CO₂ 1.0 kg/trip, USD→PKR "
+               f"{USD_TO_PKR:.0f}. Figures are estimates for demonstration.")
 
 
 def merchant_dashboard():
     st.header("Merchant Risk Dashboard")
-    rows = []
-    for name, feats in DEMO_PROFILES.items():
-        r = _engine().predict_return(feats)
-        rows.append({
-            "profile": name, "category": feats["product_category"],
-            "refund_usd": feats["refund_amount_requested_usd"],
-            "class": r["predicted_class"], "action": r["action"],
-            "fee_pkr": r["fee_pkr"], "latency_ms": round(r["latency_ms"], 1),
-        })
-    df = pd.DataFrame(rows)
+
+    source = st.radio("Data source", ["Demo profiles", "Sample from dataset"],
+                      horizontal=True)
+    if source == "Demo profiles":
+        base = pd.DataFrame([{**{"order_id": name}, **f} for name, f in DEMO_PROFILES.items()])
+    else:
+        base = sample_returns(40)
+        if base.empty:
+            st.warning("Dataset not found; showing demo profiles instead.")
+            base = pd.DataFrame([{**{"order_id": name}, **f} for name, f in DEMO_PROFILES.items()])
+
+    scored = _score_frame(base)
 
     k1, k2, k3, k4 = st.columns(4)
-    k1.metric("Returns analyzed", len(df))
-    protected = df.loc[df["action"].isin(["FRAUD_HOLD", "VERIFY_TAGS"]), "refund_usd"].sum()
-    k2.metric("Value protected (USD)", f"{protected:.0f}")
-    k3.metric("Fees applied (PKR)", int(df["fee_pkr"].sum()))
-    honest = (df["action"] == "AUTO_APPROVE").mean() * 100
-    k4.metric("Auto-approved %", f"{honest:.0f}%")
+    k1.metric("Returns analyzed", len(scored))
+    k2.metric("Flagged (fraud/wardrobe)",
+              int(scored["action"].isin(["FRAUD_HOLD", "VERIFY_TAGS"]).sum()))
+    k3.metric("Fees applied (PKR)", int(scored["fee_pkr"].sum()))
+    k4.metric("Auto-approved %",
+              f"{(scored['action'] == 'AUTO_APPROVE').mean() * 100:.0f}%")
 
-    st.dataframe(df, use_container_width=True)
+    impact_panel(scored)
 
-    sel = st.selectbox("Inspect a return", df["profile"].tolist())
-    result = _engine().predict_return(DEMO_PROFILES[sel])
-    st.subheader(f"{sel} → {result['action']}")
-    st.write("**Merchant note:**", result["merchant_note"])
-    st.write("**Class probabilities**")
-    st.bar_chart(pd.Series(result["probs"]))
-    st.write("**Top reasons (SHAP)**")
-    for feat, val in result["top_reasons"]:
-        st.write(f"- `{feat}`: {val:+.3f}")
+    st.subheader("Analyzed returns")
+    f1, f2 = st.columns(2)
+    cls_filter = f1.multiselect("Filter class", sorted(scored["class"].unique()))
+    act_filter = f2.multiselect("Filter action", sorted(scored["action"].unique()))
+    view = scored.copy()
+    if cls_filter:
+        view = view[view["class"].isin(cls_filter)]
+    if act_filter:
+        view = view[view["action"].isin(act_filter)]
+    st.dataframe(view, use_container_width=True)
 
-    with st.expander("Assumptions"):
-        st.write("Handling cost and CO2 figures are illustrative estimates. "
-                 "Thresholds are tuned on a held-out validation split. "
-                 "Model trained on a public synthetic benchmark dataset.")
+    st.subheader("Inspect & override")
+    idx = st.selectbox("Select a return (row index)", view.index.tolist()
+                       if len(view) else scored.index.tolist())
+    rec = base.loc[idx].to_dict()
+    rec.setdefault("order_date", "2023-06-01")
+    rec.setdefault("return_date", "2023-06-10")
+    result = engine().predict_return(rec)
+
+    cL, cR = st.columns([1, 1])
+    with cL:
+        st.write(f"**AI decision:** {result['action']}  ({result['predicted_class']})")
+        st.write("**Merchant note:**", result["merchant_note"])
+        st.bar_chart(pd.Series(result["probs"]))
+    with cR:
+        st.write("**Top reasons (SHAP)**")
+        for feat, val in result["top_reasons"]:
+            st.write(f"- `{feat}`: {val:+.3f}")
+        st.markdown("**Manual override**")
+        new_action = st.selectbox("Override action",
+                                  ["(keep AI decision)", "AUTO_APPROVE", "VERIFY_TAGS",
+                                   "FEE_DEDUCTION", "FRAUD_HOLD", "LIGHT_VERIFY"])
+        note = st.text_input("Audit note (required to override)")
+        if st.button("Apply override"):
+            if new_action == "(keep AI decision)":
+                st.info("No override applied.")
+            elif not note.strip():
+                st.error("An audit note is required to override.")
+            else:
+                st.session_state.setdefault("audit_log", []).append(
+                    {"order_id": rec.get("order_id", "—"),
+                     "from": result["action"], "to": new_action, "note": note})
+                st.success(f"Override recorded: {result['action']} → {new_action}")
+
+    if st.session_state.get("audit_log"):
+        st.subheader("Override audit log")
+        st.dataframe(pd.DataFrame(st.session_state["audit_log"]),
+                     use_container_width=True)
+
+    with st.expander("Assumptions & model notes"):
+        st.write("- Thresholds tuned on a held-out validation split.")
+        st.write("- Model trained on a public synthetic benchmark; retrain on "
+                 "real merchant data before production.")
+        st.write("- Fraud class routes to human review; never auto-punished.")
+        st.write("- No sensitive attributes used as model features.")
 
 
 def main():
     st.sidebar.title("🛡️ ReturnGuard")
     view = st.sidebar.radio("View", ["Customer Portal", "Merchant Dashboard"])
     st.sidebar.caption("Explainable AI return-policy engine")
+    st.sidebar.markdown("---")
+    st.sidebar.caption("Severity order: Fraud → Wardrobe → Abuser → Legit")
     if view == "Customer Portal":
         customer_portal()
     else:
