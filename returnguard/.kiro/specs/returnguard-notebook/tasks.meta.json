@@ -1,0 +1,135 @@
+{
+  "pbtResults": {},
+  "executionHistory": {
+    "1.1 Create `returnguard/returnguard_prototype.ipynb` with all 10 Markdown heading cells in order": [
+      {
+        "executionId": "bb782fc4-909a-400c-88b7-32601c35ce96",
+        "chatSessionId": "sess_f7a43630-8c03-471a-b4b6-1e39deba92fd",
+        "timestamp": 1791617587641
+      },
+      {
+        "executionId": "bb782fc4-909a-400c-88b7-32601c35ce96",
+        "chatSessionId": "sess_f7a43630-8c03-471a-b4b6-1e39deba92fd",
+        "timestamp": 1791617641082
+      },
+      {
+        "executionId": "596d4b16-0aa1-4ac2-9bf5-9d72fee351de",
+        "chatSessionId": "sess_f7a43630-8c03-471a-b4b6-1e39deba92fd",
+        "timestamp": 1791617682678
+      },
+      {
+        "executionId": "96c23cab-d518-4a38-8d3b-5d0ef8e9f888",
+        "chatSessionId": "sess_f7a43630-8c03-471a-b4b6-1e39deba92fd",
+        "timestamp": 1791618010627
+      },
+      {
+        "executionId": "96c23cab-d518-4a38-8d3b-5d0ef8e9f888",
+        "chatSessionId": "sess_f7a43630-8c03-471a-b4b6-1e39deba92fd",
+        "timestamp": 1791618209440
+      }
+    ],
+    "1.2 Write the Setup & Imports code cell": [
+      {
+        "executionId": "bb782fc4-909a-400c-88b7-32601c35ce96",
+        "chatSessionId": "sess_f7a43630-8c03-471a-b4b6-1e39deba92fd",
+        "timestamp": 1791617588017
+      },
+      {
+        "executionId": "79776a56-bade-4fb4-b0b1-ff9e76aa89ce",
+        "chatSessionId": "sess_f7a43630-8c03-471a-b4b6-1e39deba92fd",
+        "timestamp": 1791618539959
+      }
+    ],
+    "2.1 Implement `load_and_validate()` and the dataset loading cell": [
+      {
+        "executionId": "bb782fc4-909a-400c-88b7-32601c35ce96",
+        "chatSessionId": "sess_f7a43630-8c03-471a-b4b6-1e39deba92fd",
+        "timestamp": 1791617588400
+      }
+    ],
+    "3.1 Implement EDA plotting functions and cells": [
+      {
+        "executionId": "bb782fc4-909a-400c-88b7-32601c35ce96",
+        "chatSessionId": "sess_f7a43630-8c03-471a-b4b6-1e39deba92fd",
+        "timestamp": 1791617588484
+      }
+    ],
+    "4.1 Implement `engineer_features()` and the label encoding cell": [
+      {
+        "executionId": "bb782fc4-909a-400c-88b7-32601c35ce96",
+        "chatSessionId": "sess_f7a43630-8c03-471a-b4b6-1e39deba92fd",
+        "timestamp": 1791617588541
+      }
+    ],
+    "5.1 Implement `split_data()` and the split cell": [
+      {
+        "executionId": "bb782fc4-909a-400c-88b7-32601c35ce96",
+        "chatSessionId": "sess_f7a43630-8c03-471a-b4b6-1e39deba92fd",
+        "timestamp": 1791617588633
+      }
+    ],
+    "6. Checkpoint — Verify data pipeline end-to-end": [
+      {
+        "executionId": "bb782fc4-909a-400c-88b7-32601c35ce96",
+        "chatSessionId": "sess_f7a43630-8c03-471a-b4b6-1e39deba92fd",
+        "timestamp": 1791617588678
+      }
+    ],
+    "7.1 Implement model training cell with native categoricals and early stopping": [
+      {
+        "executionId": "bb782fc4-909a-400c-88b7-32601c35ce96",
+        "chatSessionId": "sess_f7a43630-8c03-471a-b4b6-1e39deba92fd",
+        "timestamp": 1791617588725
+      }
+    ],
+    "7.2 Implement test-set evaluation and artifact saving": [
+      {
+        "executionId": "bb782fc4-909a-400c-88b7-32601c35ce96",
+        "chatSessionId": "sess_f7a43630-8c03-471a-b4b6-1e39deba92fd",
+        "timestamp": 1791617588772
+      }
+    ],
+    "8.1 Implement `tune_threshold()` and the POLICY_CONFIG sweep cell": [
+      {
+        "executionId": "bb782fc4-909a-400c-88b7-32601c35ce96",
+        "chatSessionId": "sess_f7a43630-8c03-471a-b4b6-1e39deba92fd",
+        "timestamp": 1791617588841
+      }
+    ],
+    "9.1 Implement cached TreeExplainer and four waterfall plots": [
+      {
+        "executionId": "bb782fc4-909a-400c-88b7-32601c35ce96",
+        "chatSessionId": "sess_f7a43630-8c03-471a-b4b6-1e39deba92fd",
+        "timestamp": 1791617588929
+      }
+    ],
+    "10.1 Implement `predict_return(features: dict) -> dict`": [
+      {
+        "executionId": "bb782fc4-909a-400c-88b7-32601c35ce96",
+        "chatSessionId": "sess_f7a43630-8c03-471a-b4b6-1e39deba92fd",
+        "timestamp": 1791617588977
+      }
+    ],
+    "11. Checkpoint — Verify policy engine with unit calls": [
+      {
+        "executionId": "bb782fc4-909a-400c-88b7-32601c35ce96",
+        "chatSessionId": "sess_f7a43630-8c03-471a-b4b6-1e39deba92fd",
+        "timestamp": 1791617589030
+      }
+    ],
+    "12.1 Implement four demo profile dicts and validation loop": [
+      {
+        "executionId": "bb782fc4-909a-400c-88b7-32601c35ce96",
+        "chatSessionId": "sess_f7a43630-8c03-471a-b4b6-1e39deba92fd",
+        "timestamp": 1791617589077
+      }
+    ],
+    "13. Final Checkpoint — Full notebook run validation": [
+      {
+        "executionId": "bb782fc4-909a-400c-88b7-32601c35ce96",
+        "chatSessionId": "sess_f7a43630-8c03-471a-b4b6-1e39deba92fd",
+        "timestamp": 1791617589182
+      }
+    ]
+  }
+}

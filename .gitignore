@@ -1,0 +1,15 @@
+# Datasets (large, keep local only — GitHub 100MB limit)
+datasets/
+returnguard/data/
+
+__pycache__/
+*.py[cod]
+.ipynb_checkpoints/
+.venv/
+venv/
+*.joblib
+artifacts/*.joblib
+.pytest_cache/
+.hypothesis/
+*.egg-info/
+.DS_Store
