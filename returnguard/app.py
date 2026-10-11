@@ -523,6 +523,140 @@ def merchant_dashboard():
         """)
 
 
+
+# ====================== API Service (subscribe + live console) ======================
+import os
+import json as _json
+import requests as _requests
+
+# Backend base URL. Point this at your deployed FastAPI service.
+# Default: local dev server. Override via env var RETURNGUARD_API_URL or the
+# input box in the UI.
+DEFAULT_API_URL = os.environ.get("RETURNGUARD_API_URL", "http://localhost:8000")
+
+# Local plan catalogue (mirrors backend/plans.py) so the pricing cards render
+# even if the backend is offline.
+_PLAN_CARDS = [
+    {"id": "free", "name": "Free", "price": "$0", "quota": "500 / month",
+     "blurb": "Evaluation and small projects."},
+    {"id": "starter", "name": "Starter", "price": "$49", "quota": "10,000 / month",
+     "blurb": "Growing stores."},
+    {"id": "pro", "name": "Pro", "price": "$299", "quota": "100,000 / month",
+     "blurb": "High-volume merchants."},
+]
+
+
+def _api_url():
+    return st.session_state.get("api_url", DEFAULT_API_URL).rstrip("/")
+
+
+def api_service():
+    st.header("ReturnGuard API")
+    st.caption("Score returns from your own systems. Subscribe to get an API key, "
+               "then call the REST endpoint. Free tier available now.")
+
+    st.text_input("Backend API URL", value=_api_url(), key="api_url",
+                  help="Where the FastAPI backend is running. "
+                       "Locally: http://localhost:8000")
+
+    # ---- health badge ----
+    try:
+        h = _requests.get(f"{_api_url()}/v1/health", timeout=4).json()
+        st.success(f"API online · model loaded: {h.get('model_loaded')}")
+    except Exception:
+        st.warning("API not reachable yet. Start the backend "
+                   "(uvicorn backend.main:app) or set the URL above.")
+
+    # ---- pricing cards ----
+    st.subheader("Plans")
+    cols = st.columns(3)
+    for col, plan in zip(cols, _PLAN_CARDS):
+        with col:
+            st.markdown(f"### {plan['name']}")
+            st.markdown(f"**{plan['price']}** / month")
+            st.caption(plan["quota"])
+            st.write(plan["blurb"])
+
+    st.markdown("---")
+
+    # ---- subscribe ----
+    st.subheader("Get an API key")
+    c1, c2 = st.columns([1, 1])
+    with c1:
+        chosen = st.selectbox("Plan", [p["id"] for p in _PLAN_CARDS],
+                              format_func=lambda x: x.capitalize())
+        email = st.text_input("Email (optional)")
+        if st.button("Subscribe & get key", type="primary"):
+            try:
+                r = _requests.post(f"{_api_url()}/v1/subscribe",
+                                   json={"plan": chosen, "email": email or None},
+                                   timeout=8)
+                if r.ok:
+                    data = r.json()
+                    st.session_state["issued_key"] = data["api_key"]
+                    st.success(f"Subscribed to {data['plan']} "
+                               f"(quota {data['monthly_quota']}/mo). "
+                               f"Payment: {data.get('payment')}")
+                else:
+                    st.error(f"{r.status_code}: {r.text}")
+            except Exception as e:
+                st.error(f"Request failed: {e}")
+    with c2:
+        key = st.text_input("Your API key",
+                            value=st.session_state.get("issued_key", ""),
+                            type="password")
+        if st.button("Check usage"):
+            try:
+                r = _requests.get(f"{_api_url()}/v1/usage",
+                                  headers={"X-API-Key": key}, timeout=8)
+                st.json(r.json())
+            except Exception as e:
+                st.error(f"Request failed: {e}")
+
+    st.markdown("---")
+
+    # ---- live console ----
+    st.subheader("Try the API")
+    preset = st.selectbox("Load a sample profile", list(DEMO_PROFILES.keys()))
+    payload = {k: v for k, v in DEMO_PROFILES[preset].items()}
+    with st.expander("Request body (editable JSON)"):
+        body_text = st.text_area("JSON", value=_json.dumps(payload, indent=2),
+                                 height=240, label_visibility="collapsed")
+    call_key = st.text_input("X-API-Key for this call",
+                            value=st.session_state.get("issued_key", "rg_demo_free_key"),
+                            type="password")
+    if st.button("POST /v1/predict", type="primary"):
+        try:
+            body = _json.loads(body_text)
+            r = _requests.post(f"{_api_url()}/v1/predict", json=body,
+                               headers={"X-API-Key": call_key}, timeout=10)
+            if r.ok:
+                st.json(r.json())
+            else:
+                st.error(f"{r.status_code}: {r.text}")
+        except Exception as e:
+            st.error(f"Request failed: {e}")
+
+    # ---- code snippet ----
+    with st.expander("Use it from code (Python)"):
+        st.code(
+            "import requests\n"
+            f"r = requests.post('{_api_url()}/v1/predict',\n"
+            "    headers={'X-API-Key': 'YOUR_KEY'},\n"
+            "    json={ ...return features... })\n"
+            "print(r.json())",
+            language="python",
+        )
+    with st.expander("Use it from code (cURL)"):
+        st.code(
+            f"curl -X POST {_api_url()}/v1/predict \\\n"
+            "  -H 'X-API-Key: YOUR_KEY' \\\n"
+            "  -H 'Content-Type: application/json' \\\n"
+            "  -d '{\"product_category\": \"Clothing\", ...}'",
+            language="bash",
+        )
+
+
 def main():
     st.sidebar.markdown(
         "<h1 style='text-align: center; margin-bottom: 0;'><span class='material-symbols-outlined' style='font-size:1.5rem'>security</span> ReturnGuard</h1>", 
@@ -535,7 +669,7 @@ def main():
     
     view = st.sidebar.radio(
         "Navigation", 
-        ["Customer Portal", "Merchant Dashboard"],
+        ["Customer Portal", "Merchant Dashboard", "API Service"],
         help="Switch between the customer-facing returns flow and the internal risk analyst dashboard."
     )
     st.sidebar.markdown("---")
@@ -543,8 +677,10 @@ def main():
     
     if view == "Customer Portal":
         customer_portal()
-    else:
+    elif view == "Merchant Dashboard":
         merchant_dashboard()
+    else:
+        api_service()
 
 
 if __name__ == "__main__":
