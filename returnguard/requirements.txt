@@ -12,3 +12,8 @@ streamlit>=1.40
 # Test tooling (not needed at runtime, harmless on Cloud)
 hypothesis>=6.80
 pytest>=7.4
+
+# API service
+requests>=2.31
+fastapi>=0.110
+uvicorn[standard]>=0.29
